@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atelier de simulation — Propagation d'une rumeur</title>
+<style>
+  /* ======================================================
+     PALETTE & VARIABLES
+     Les couleurs reprennent celles du document TPE (vert,
+     ambre, gris ardoise) pour rester cohérent visuellement.
+     ====================================================== */
+  :root{
+    --ink:#13171a;          /* fond général de la page */
+    --panel:#1b2123;        /* fond des panneaux (cartes) */
+    --panel-border:#2a3234;
+    --paper:#f3efe6;        /* fond de la grille = couleur "Ignorant" */
+    --paper-line:#e3ddcc;
+    --amber:#f0a93e;        /* couleur des Propagateurs (S) */
+    --amber-soft:#f0a93e33;
+    --slate:#7b8b89;        /* couleur des Sceptiques (R) */
+    --green:#379469;        /* couleur d'action (bouton principal) */
+    --green-soft:#37946933;
+    --text:#eef1ee;
+    --text-muted:#9aa8a5;
+    --mono: "SF Mono", "Consolas", "Menlo", monospace;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--text);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{
+    max-width:1180px;
+    margin:0 auto;
+    padding:28px 22px 60px;
+  }
+
+  /* ----------------- EN-TÊTE ----------------- */
+  header{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    margin-bottom:22px;
+    border-bottom:1px solid var(--panel-border);
+    padding-bottom:18px;
+  }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--amber);
+  }
+  h1{
+    font-family:var(--serif);
+    font-size:30px;
+    font-weight:400;
+    margin:0;
+    letter-spacing:.2px;
+  }
+  .subtitle{
+    color:var(--text-muted);
+    font-size:14.5px;
+    max-width:680px;
+    line-height:1.5;
+  }
+
+  /* ----------------- MISE EN PAGE GÉNÉRALE -----------------
+     La grille de simulation (.stage) est affichée en premier,
+     et le panneau de paramètres (.panel) en dessous.
+     Une seule colonne, empilée verticalement : pas besoin de
+     media query, ce layout fonctionne aussi bien sur mobile
+     que sur grand écran.
+     ----------------------------------------------------------- */
+  .layout{
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    padding:18px;
+  }
+  .panel h2{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+    margin:0 0 14px;
+  }
+
+  /* Disposition interne du panneau de paramètres : grille
+     responsive pour que les champs se rangent côte à côte
+     une fois sous la zone de simulation. */
+  .panel-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+    gap:18px 28px;
+  }
+  .panel-actions{
+    margin-top:18px;
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+    gap:18px 28px;
+    align-items:start;
+  }
+
+  .field{ margin-bottom:16px; }
+  .field label{
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    margin-bottom:6px;
+    color:var(--text);
+  }
+  .field label .val{
+    font-family:var(--mono);
+    color:var(--amber);
+    font-size:12.5px;
+  }
+  input[type=range]{
+    width:100%;
+    accent-color:var(--amber);
+    height:4px;
+  }
+  select{
+    width:100%;
+    background:#111516;
+    color:var(--text);
+    border:1px solid var(--panel-border);
+    border-radius:6px;
+    padding:7px 8px;
+    font-size:13px;
+    font-family:var(--sans);
+  }
+  .checkrow{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:13px;
+    margin-bottom:14px;
+    color:var(--text);
+  }
+  .checkrow input{ accent-color: var(--amber); }
+  .btnrow{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-top:6px;
+  }
+  button{
+    font-family:var(--sans);
+    font-size:13px;
+    font-weight:600;
+    border-radius:7px;
+    border:1px solid var(--panel-border);
+    padding:9px 10px;
+    cursor:pointer;
+    background:#111516;
+    color:var(--text);
+    transition:transform .06s ease, background .15s ease;
+  }
+  button:hover{ background:#171d1f; }
+  button:active{ transform:scale(.97); }
+  button.primary{
+    background:var(--green);
+    border-color:var(--green);
+    color:#0c1210;
+  }
+  button.primary:hover{ background:#2f8059; }
+  button.full{ grid-column:1 / -1; }
+  .hint{
+    font-size:11.5px;
+    color:var(--text-muted);
+    line-height:1.5;
+    margin-top:10px;
+  }
+  .legend{
+    display:flex;
+    gap:14px;
+    flex-wrap:wrap;
+    font-size:12.5px;
+    margin-top:4px;
+  }
+  .legend span{ display:flex; align-items:center; gap:6px; }
+  .dot{ width:10px; height:10px; border-radius:2px; display:inline-block; }
+
+  /* ----------------- ZONE DE SIMULATION ----------------- */
+  .stage{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    padding:18px;
+  }
+  .stage-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:12px;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .stats{
+    display:flex;
+    gap:18px;
+    font-family:var(--mono);
+    font-size:12.5px;
+  }
+  .stats div span{ color:var(--text-muted); }
+  #gridCanvas{
+    width:100%;
+    aspect-ratio:1/1;
+    background:var(--paper);
+    border-radius:6px;
+    display:block;
+    cursor:crosshair;
+    touch-action:none;
+  }
+  .canvasNote{
+    font-size:11.5px;
+    color:var(--text-muted);
+    margin-top:8px;
+  }
+  .chartBlock{
+    margin-top:18px;
+  }
+  #chartCanvas{
+    width:100%;
+    height:180px;
+    display:block;
+    background:#111516;
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+  }
+  .formula{
+    font-family:var(--mono);
+    font-size:12px;
+    background:#111516;
+    border:1px solid var(--panel-border);
+    border-radius:6px;
+    padding:10px 12px;
+    line-height:1.7;
+    color:#d9e4df;
+    margin-top:4px;
+  }
+  .formula b{ color:var(--amber); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">TPE — Automates cellulaires &amp; diffusion sociale</div>
+    <h1>Atelier de simulation : la rumeur sur grille</h1>
+    <div class="subtitle">
+      Chaque cellule est un individu : Ignorant, Propagateur ou Sceptique. À chaque pas,
+      les règles s'appliquent localement selon le voisinage — exactement comme dans le Jeu de la Vie,
+      mais avec des transitions probabilistes à trois états.
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- ============================================================
+         1) ZONE DE SIMULATION (grille + graphique)
+         Placée en premier : c'est ce que l'on regarde en priorité.
+         ============================================================ -->
+    <div class="stage">
+      <div class="stage-top">
+        <div class="legend">
+          <span><i class="dot" style="background:#e3ddcc"></i> Ignorant</span>
+          <span><i class="dot" style="background:var(--amber)"></i> Propagateur</span>
+          <span><i class="dot" style="background:var(--slate)"></i> Sceptique</span>
+        </div>
+        <!-- Compteurs mis à jour en direct par updateStats() -->
+        <div class="stats">
+          <div>pas <span id="stepCount">0</span></div>
+          <div>I <span id="pctI">100%</span></div>
+          <div>S <span id="pctS">0%</span></div>
+          <div>R <span id="pctR">0%</span></div>
+          <div>touchés <span id="pctTouched">0%</span></div>
+        </div>
+      </div>
+
+      <!-- Le canevas de la grille : chaque cellule y est dessinée
+           comme un simple rectangle coloré (voir draw() en JS) -->
+      <canvas id="gridCanvas"></canvas>
+      <div class="canvasNote">La grille se met à jour de manière synchrone, comme dans le Jeu de la Vie.</div>
+
+      <!-- Le canevas du graphique I(t)/S(t)/R(t) (voir drawChart() en JS) -->
+      <div class="chartBlock">
+        <canvas id="chartCanvas"></canvas>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         2) PANNEAU DE PARAMÈTRES
+         Placé en dessous de la simulation, comme demandé : on
+         regarde d'abord la grille, puis on ajuste les réglages.
+         ============================================================ -->
+    <div class="panel">
+      <h2>Paramètres</h2>
+
+      <div class="panel-grid">
+        <!-- Curseur λ : probabilité de transmission par voisin propagateur -->
+        <div class="field">
+          <label>Taux de transmission λ <span class="val" id="vLambda">0.35</span></label>
+          <input type="range" id="lambda" min="0" max="1" step="0.01" value="0.35">
+        </div>
+
+        <!-- Curseur β₀ : probabilité de base qu'un propagateur se lasse -->
+        <div class="field">
+          <label>Lassitude de base β₀ <span class="val" id="vBeta">0.04</span></label>
+          <input type="range" id="beta0" min="0" max="0.3" step="0.005" value="0.04">
+        </div>
+
+        <!-- Curseur γ : effet de saturation sociale (S→R plus probable
+             si la cellule est déjà entourée de gens "au courant") -->
+        <div class="field">
+          <label>Saturation sociale γ <span class="val" id="vGamma">0.12</span></label>
+          <input type="range" id="gamma" min="0" max="0.5" step="0.005" value="0.12">
+        </div>
+
+        <!-- Taille de la grille N (la grille fait N × N cellules) -->
+        <div class="field">
+          <label>Taille de la grille <span class="val" id="vSize">50 × 50</span></label>
+          <input type="range" id="gridSize" min="20" max="90" step="1" value="50">
+        </div>
+
+        <!-- Vitesse de simulation, en pas par seconde -->
+        <div class="field">
+          <label>Vitesse <span class="val" id="vSpeed">8 pas/s</span></label>
+          <input type="range" id="speed" min="1" max="30" step="1" value="8">
+        </div>
+
+        <!-- Type de voisinage utilisé pour compter les voisins -->
+        <div class="field">
+          <label style="margin-bottom:6px;">Voisinage</label>
+          <select id="neighborhood">
+            <option value="moore">Moore (8 voisins)</option>
+            <option value="vonneumann">Von Neumann (4 voisins)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Case à cocher : grille torique (les bords se rebouclent) -->
+      <div class="checkrow">
+        <input type="checkbox" id="wrap">
+        <label for="wrap">Bords périodiques (grille torique)</label>
+      </div>
+
+      <div class="panel-actions">
+        <div class="btnrow">
+          <button class="primary full" id="playBtn">▶ Lancer</button>
+          <button id="stepBtn">⏭ Pas à pas</button>
+          <button id="seedBtn">🎲 Semer</button>
+          <button class="full" id="resetBtn">↺ Réinitialiser la grille</button>
+        </div>
+
+        <div>
+          <div class="hint">
+            Clique ou glisse sur la grille (en pause) pour placer toi-même des propagateurs,
+            puis lance la simulation.
+          </div>
+
+          <h2 style="margin-top:18px;">Règles appliquées</h2>
+          <div class="formula">
+            I → S avec p = 1 − (1 − <b>λ</b>)<sup>n_S</sup><br>
+            S → R avec p = <b>β₀</b> + <b>γ</b>·(n_S+n_R)/k
+          </div>
+          <div class="hint">n_S, n_R : voisins Propagateurs / Sceptiques. k : taille du voisinage (8 ou 4).</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   SIMULATEUR DE PROPAGATION DE RUMEUR — AUTOMATE CELLULAIRE
+   ------------------------------------------------------------
+   Principe général :
+   - la grille est un tableau plat d'entiers (0=I, 1=S, 2=R)
+   - à chaque pas, on calcule une NOUVELLE grille à partir de
+     l'ANCIENNE (mise à jour synchrone, comme le Jeu de la Vie)
+   - les transitions I->S et S->R sont probabilistes : on tire
+     un nombre aléatoire et on compare à une probabilité p
+     calculée à partir du nombre de voisins concernés
+   ============================================================ */
+(function(){
+
+  // Couleurs utilisées pour dessiner chaque état sur le canevas
+  const COLORS = { I:'#e3ddcc', S:'#f0a93e', R:'#7b8b89' };
+  // Constantes nommées pour ne pas semer des "0,1,2" magiques dans le code
+  const STATE = { I:0, S:1, R:2 };
+
+  let N = 50;             // taille de la grille (N x N cellules)
+  let grid = null;        // Uint8Array contenant l'état de chaque cellule
+  let running = false;    // simulation en cours ou en pause ?
+  let stepNum = 0;        // compteur de pas de temps écoulés
+  let history = [];       // historique des proportions {i,s,r} pour le graphique
+  let rafId = null;       // identifiant de la boucle requestAnimationFrame
+  let lastTick = 0;       // horodatage du dernier pas exécuté
+
+  // Récupération de tous les éléments du DOM dont on aura besoin,
+  // regroupés ici pour ne pas avoir à les chercher plusieurs fois.
+  const els = {
+    lambda: document.getElementById('lambda'),
+    beta0: document.getElementById('beta0'),
+    gamma: document.getElementById('gamma'),
+    gridSize: document.getElementById('gridSize'),
+    speed: document.getElementById('speed'),
+    neighborhood: document.getElementById('neighborhood'),
+    wrap: document.getElementById('wrap'),
+    playBtn: document.getElementById('playBtn'),
+    stepBtn: document.getElementById('stepBtn'),
+    seedBtn: document.getElementById('seedBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    vLambda: document.getElementById('vLambda'),
+    vBeta: document.getElementById('vBeta'),
+    vGamma: document.getElementById('vGamma'),
+    vSize: document.getElementById('vSize'),
+    vSpeed: document.getElementById('vSpeed'),
+    stepCount: document.getElementById('stepCount'),
+    pctI: document.getElementById('pctI'),
+    pctS: document.getElementById('pctS'),
+    pctR: document.getElementById('pctR'),
+    pctTouched: document.getElementById('pctTouched'),
+  };
+
+  const gridCanvas = document.getElementById('gridCanvas');
+  const gctx = gridCanvas.getContext('2d');
+  const chartCanvas = document.getElementById('chartCanvas');
+  const cctx = chartCanvas.getContext('2d');
+
+  /* ------------------------------------------------------------
+     initGrid(n) : (ré)initialise toute la simulation.
+     - crée une grille n x n entièrement "Ignorant"
+     - place quelques Propagateurs au centre (la "source" de la rumeur)
+     - réinitialise compteur de pas et historique du graphique
+     ------------------------------------------------------------ */
+  function initGrid(n){
+    N = n;
+    grid = new Uint8Array(N*N); // rempli de 0 (= Ignorant) par défaut
+    stepNum = 0;
+    history = [];
+
+    // Petit foyer initial de 4 propagateurs au centre de la grille
+    const cx = Math.floor(N/2), cy = Math.floor(N/2);
+    [[0,0],[1,0],[0,1],[-1,0]].forEach(([dx,dy])=>{
+      const x=cx+dx, y=cy+dy;
+      if(x>=0&&x<N&&y>=0&&y<N) grid[y*N+x]=STATE.S;
+    });
+
+    recordHistory();     // enregistre l'état t=0 dans l'historique
+    resizeCanvases();    // adapte la résolution des canevas à leur taille CSS
+    draw();               // dessine l'état initial
+  }
+
+  /* ------------------------------------------------------------
+     seedRandom() : ajoute aléatoirement de nouveaux propagateurs
+     sur la grille, sans toucher au reste (utile pour simuler
+     plusieurs foyers de rumeur indépendants).
+     ------------------------------------------------------------ */
+  function seedRandom(){
+    const k = Math.max(1, Math.floor(N*N*0.002)); // ~0,2% de la population
+    for(let i=0;i<k;i++){
+      const x = Math.floor(Math.random()*N);
+      const y = Math.floor(Math.random()*N);
+      grid[y*N+x] = STATE.S;
+    }
+    draw();
+  }
+
+  /* ------------------------------------------------------------
+     neighborOffsets() : renvoie la liste des décalages (dx,dy)
+     à examiner autour d'une cellule, selon le voisinage choisi
+     dans le menu déroulant.
+       - Von Neumann : seulement haut/bas/gauche/droite (4)
+       - Moore        : les 8 cellules adjacentes (diagonales incluses)
+     ------------------------------------------------------------ */
+  function neighborOffsets(){
+    if(els.neighborhood.value === 'vonneumann'){
+      return [[1,0],[-1,0],[0,1],[0,-1]];
+    }
+    return [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  }
+
+  /* ------------------------------------------------------------
+     countNeighbors(x, y, offsets, wrap) : compte, parmi les
+     voisins de la cellule (x,y), combien sont des Propagateurs
+     (nS) et combien sont des Sceptiques (nR).
+     - si wrap=true  : les bords se rebouclent (grille torique)
+     - si wrap=false : les voisins hors-grille sont simplement ignorés
+     ------------------------------------------------------------ */
+  function countNeighbors(x,y,offsets,wrap){
+    let nS=0, nR=0;
+    for(const [dx,dy] of offsets){
+      let nx=x+dx, ny=y+dy;
+      if(wrap){
+        nx=(nx+N)%N; ny=(ny+N)%N; // repasse de l'autre côté de la grille
+      } else if(nx<0||nx>=N||ny<0||ny>=N){
+        continue; // voisin hors-grille : on ne le compte pas
+      }
+      const s = grid[ny*N+nx];
+      if(s===STATE.S) nS++;
+      else if(s===STATE.R) nR++;
+    }
+    return [nS,nR];
+  }
+
+  /* ------------------------------------------------------------
+     stepOnce() : calcule un pas de temps complet de l'automate.
+
+     Étape clé : on écrit les nouveaux états dans une COPIE de la
+     grille ("next"), jamais dans la grille en cours de lecture.
+     C'est ce qui garantit une mise à jour SYNCHRONE : aucune
+     cellule ne "voit" le changement d'une autre cellule traitée
+     plus tôt dans la même boucle (exactement comme dans le Jeu
+     de la Vie).
+     ------------------------------------------------------------ */
+  function stepOnce(){
+    const lambda = parseFloat(els.lambda.value);
+    const beta0 = parseFloat(els.beta0.value);
+    const gamma = parseFloat(els.gamma.value);
+    const wrap = els.wrap.checked;
+    const offsets = neighborOffsets();
+    const k = offsets.length; // 8 (Moore) ou 4 (Von Neumann)
+    const next = grid.slice(); // copie de la grille actuelle
+
+    for(let y=0;y<N;y++){
+      for(let x=0;x<N;x++){
+        const idx = y*N+x;
+        const s = grid[idx];
+
+        if(s===STATE.I){
+          // Règle I -> S : plus il y a de voisins propagateurs (nS),
+          // plus la probabilité cumulée d'apprendre la rumeur augmente.
+          const [nS] = countNeighbors(x,y,offsets,wrap);
+          if(nS>0){
+            const p = 1 - Math.pow(1-lambda, nS);
+            if(Math.random() < p) next[idx] = STATE.S;
+          }
+
+        } else if(s===STATE.S){
+          // Règle S -> R : plus la cellule est entourée de voisins
+          // qui connaissent déjà la rumeur (S ou R), plus elle a de
+          // chances de se lasser de la raconter (effet de saturation).
+          const [nS,nR] = countNeighbors(x,y,offsets,wrap);
+          const p = Math.min(1, Math.max(0, beta0 + gamma*(nS+nR)/k));
+          if(Math.random() < p) next[idx] = STATE.R;
+        }
+        // Remarque : l'état R est absorbant, on ne traite pas ce cas :
+        // une cellule R reste R (elle est déjà recopiée dans "next").
+      }
+    }
+    grid = next;
+    stepNum++;
+    recordHistory();
+  }
+
+  /* ------------------------------------------------------------
+     recordHistory() : compte les cellules dans chaque état,
+     met à jour les compteurs affichés à l'écran, et empile les
+     nouvelles proportions dans l'historique utilisé par le graphique.
+     ------------------------------------------------------------ */
+  function recordHistory(){
+    let cI=0,cS=0,cR=0;
+    for(let i=0;i<grid.length;i++){
+      if(grid[i]===STATE.I) cI++;
+      else if(grid[i]===STATE.S) cS++;
+      else cR++;
+    }
+    const total = N*N;
+    history.push({i:cI/total, s:cS/total, r:cR/total});
+    if(history.length>400) history.shift(); // limite la taille de l'historique
+    updateStats(cI,cS,cR,total);
+  }
+
+  // Met à jour les nombres affichés en haut de la zone de simulation
+  function updateStats(cI,cS,cR,total){
+    els.stepCount.textContent = stepNum;
+    els.pctI.textContent = Math.round(100*cI/total)+'%';
+    els.pctS.textContent = Math.round(100*cS/total)+'%';
+    els.pctR.textContent = Math.round(100*cR/total)+'%';
+    els.pctTouched.textContent = Math.round(100*(cS+cR)/total)+'%'; // S+R = "a déjà su"
+  }
+
+  /* ------------------------------------------------------------
+     resizeCanvases() : adapte la résolution interne des canevas
+     à leur taille réelle affichée à l'écran, en tenant compte de
+     la densité de pixels (devicePixelRatio) pour rester net sur
+     les écrans Retina / haute définition.
+     ------------------------------------------------------------ */
+  function resizeCanvases(){
+    const rect = gridCanvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    gridCanvas.width = rect.width*dpr;
+    gridCanvas.height = rect.width*dpr; // canevas carré
+    gctx.setTransform(dpr,0,0,dpr,0,0);
+
+    const crect = chartCanvas.getBoundingClientRect();
+    chartCanvas.width = crect.width*dpr;
+    chartCanvas.height = crect.height*dpr;
+    cctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  /* ------------------------------------------------------------
+     draw() : dessine l'état actuel de la grille.
+     Astuce de performance : on remplit tout le fond avec la
+     couleur "Ignorant", puis on ne dessine explicitement que les
+     cellules S et R (qui sont en général minoritaires au début).
+     ------------------------------------------------------------ */
+  function draw(){
+    const w = gridCanvas.getBoundingClientRect().width;
+    const cell = w/N; // taille d'une cellule en pixels
+    gctx.clearRect(0,0,w,w);
+    gctx.fillStyle = COLORS.I;
+    gctx.fillRect(0,0,w,w);
+    for(let y=0;y<N;y++){
+      for(let x=0;x<N;x++){
+        const s = grid[y*N+x];
+        if(s===STATE.I) continue; // déjà couvert par le fond
+        gctx.fillStyle = s===STATE.S ? COLORS.S : COLORS.R;
+        gctx.fillRect(x*cell, y*cell, Math.ceil(cell), Math.ceil(cell));
+      }
+    }
+    drawChart();
+  }
+
+  /* ------------------------------------------------------------
+     drawChart() : trace les courbes I(t)/S(t)/R(t) à partir du
+     tableau "history". Dessin "fait main" avec l'API Canvas
+     (pas de bibliothèque externe) : quatre lignes de grille
+     horizontales, puis une polyligne par état.
+     ------------------------------------------------------------ */
+  function drawChart(){
+    const w = chartCanvas.getBoundingClientRect().width;
+    const h = chartCanvas.getBoundingClientRect().height;
+    cctx.clearRect(0,0,w,h);
+
+    // Lignes de repère horizontales (0%, 25%, 50%, 75%, 100%)
+    cctx.strokeStyle = '#2a3234';
+    cctx.lineWidth = 1;
+    for(let f=0; f<=1; f+=0.25){
+      const y = h - f*h;
+      cctx.beginPath(); cctx.moveTo(0,y); cctx.lineTo(w,y); cctx.stroke();
+    }
+
+    if(history.length<2) return;
+    const n = history.length;
+    const stepX = w/Math.max(1,n-1); // distance horizontale entre deux points
+
+    // Trace une courbe pour une clé donnée ('i', 's' ou 'r')
+    function drawSeries(key, color){
+      cctx.beginPath();
+      cctx.strokeStyle = color;
+      cctx.lineWidth = 2;
+      history.forEach((pt,idx)=>{
+        const x = idx*stepX;
+        const y = h - pt[key]*h; // axe Y inversé (0 en bas, 1 en haut)
+        if(idx===0) cctx.moveTo(x,y); else cctx.lineTo(x,y);
+      });
+      cctx.stroke();
+    }
+    drawSeries('i', '#aab0a3'); // teinte un peu plus contrastée que le fond clair
+    drawSeries('s', COLORS.S);
+    drawSeries('r', COLORS.R);
+  }
+
+  /* ============================================================
+     BOUCLE D'ANIMATION
+     requestAnimationFrame rappelle loop() à chaque rafraîchissement
+     d'écran (~60 fois/s), mais on n'exécute un VRAI pas de simulation
+     que si suffisamment de temps s'est écoulé depuis le précédent —
+     c'est ce qui permet de régler la vitesse indépendamment du taux
+     de rafraîchissement de l'écran.
+     ============================================================ */
+  function loop(ts){
+    if(!running) return;
+    const interval = 1000/parseFloat(els.speed.value); // ms entre deux pas
+    if(ts-lastTick >= interval){
+      stepOnce();
+      draw();
+      lastTick = ts;
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function play(){
+    if(running) return;
+    running = true;
+    els.playBtn.textContent = '⏸ Pause';
+    lastTick = 0;
+    rafId = requestAnimationFrame(loop);
+  }
+  function pause(){
+    running = false;
+    els.playBtn.textContent = '▶ Lancer';
+    if(rafId) cancelAnimationFrame(rafId);
+  }
+
+  /* ============================================================
+     ÉCOUTEURS D'ÉVÉNEMENTS (boutons, curseurs, souris/tactile)
+     ============================================================ */
+
+  // Bouton Lancer/Pause : bascule simplement l'état "running"
+  els.playBtn.addEventListener('click', ()=> running ? pause() : play());
+
+  // Pas à pas : met en pause (par sécurité) puis exécute un seul pas
+  els.stepBtn.addEventListener('click', ()=>{ pause(); stepOnce(); draw(); });
+
+  // Semer : ajoute des propagateurs aléatoires sans tout réinitialiser
+  els.seedBtn.addEventListener('click', seedRandom);
+
+  // Réinitialiser : recrée une grille vierge avec la taille actuelle
+  els.resetBtn.addEventListener('click', ()=>{ pause(); initGrid(parseInt(els.gridSize.value)); });
+
+  // Mise à jour de l'affichage numérique à côté de chaque curseur
+  els.lambda.addEventListener('input', ()=> els.vLambda.textContent = parseFloat(els.lambda.value).toFixed(2));
+  els.beta0.addEventListener('input', ()=> els.vBeta.textContent = parseFloat(els.beta0.value).toFixed(3));
+  els.gamma.addEventListener('input', ()=> els.vGamma.textContent = parseFloat(els.gamma.value).toFixed(3));
+  els.speed.addEventListener('input', ()=> els.vSpeed.textContent = els.speed.value + ' pas/s');
+
+  // Changement de taille de grille : on attend la fin du glissement (change)
+  // pour ne pas réinitialiser la grille à chaque pixel de déplacement du curseur.
+  els.gridSize.addEventListener('change', ()=>{
+    els.vSize.textContent = els.gridSize.value + ' × ' + els.gridSize.value;
+    pause();
+    initGrid(parseInt(els.gridSize.value));
+  });
+  // Pendant le glissement (input), on met juste à jour l'étiquette affichée.
+  els.gridSize.addEventListener('input', ()=>{
+    els.vSize.textContent = els.gridSize.value + ' × ' + els.gridSize.value;
+  });
+
+  /* ------------------------------------------------------------
+     "Peinture" manuelle de propagateurs sur la grille :
+     l'utilisateur peut cliquer ou glisser le doigt/la souris sur
+     le canevas (uniquement quand la simulation est en pause) pour
+     placer lui-même des cellules Propagateur.
+     ------------------------------------------------------------ */
+  let painting = false;
+
+  function paintAt(clientX, clientY){
+    const rect = gridCanvas.getBoundingClientRect();
+    const cellW = rect.width/N;
+    // Conversion des coordonnées écran (pixels) en coordonnées de grille (cellules)
+    const x = Math.floor((clientX-rect.left)/cellW);
+    const y = Math.floor((clientY-rect.top)/cellW);
+    if(x<0||x>=N||y<0||y>=N) return;
+    grid[y*N+x] = STATE.S;
+    draw();
+  }
+
+  gridCanvas.addEventListener('pointerdown', e=>{
+    if(running) return; // on ne peint pas pendant que ça tourne
+    painting = true;
+    paintAt(e.clientX, e.clientY);
+  });
+  gridCanvas.addEventListener('pointermove', e=>{
+    if(painting && !running) paintAt(e.clientX, e.clientY);
+  });
+  // L'écouteur est sur window (et non le canevas) pour bien arrêter
+  // la peinture même si le pointeur sort du canevas avant le relâchement.
+  window.addEventListener('pointerup', ()=> painting=false);
+
+  // Si la fenêtre est redimensionnée, on adapte la résolution des
+  // canevas puis on redessine (sinon l'image resterait floue/déformée).
+  window.addEventListener('resize', ()=>{ resizeCanvases(); draw(); });
+
+  /* ============================================================
+     INITIALISATION AU CHARGEMENT DE LA PAGE
+     ============================================================ */
+  initGrid(50);
+})();
+</script>
+</body>
+</html>
